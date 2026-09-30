@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-OppScout briefing renderer  v1.1.0  (18 Sep 2026)
+OppScout briefing renderer  v1.1.1  (30 Sep 2026)
+
+v1.1.1: every listed item must carry at least one link, at every score, and
+every also_screened entry must carry a url; a linkless item is refused rather
+than rendered.  One-line items (Worth a look, Watch) now show every link, one
+per line, instead of only the first.
 
 v1.1.0: subject prefix "Lilt OppScout" (the Apps Script watches for it), warning
 glyph moved after the prefix, persistent item identifiers (18Sep26-A) instead of
@@ -81,6 +86,12 @@ def validate(b):
         if it["n"] in seen:
             fail(f"duplicate item id {it['n']}")
         seen.add(it["n"])
+        lk = it.get("links")
+        if not isinstance(lk, list) or not lk:
+            fail(f"item {it['n']} must carry at least one link (Notice first)")
+        for l in lk:
+            if not isinstance(l, dict) or not l.get("label") or not str(l.get("url", "")).startswith("https://"):
+                fail(f"item {it['n']} has a link without a label or an https url: {l}")
         if it["score"] >= 7:
             for k in ["fit", "do", "links"]:
                 if k not in it or not it[k]:
@@ -104,6 +115,8 @@ def validate(b):
         for k in ["n", "title"]:
             if k not in e or not e[k]:
                 fail(f"also_screened item missing '{k}': {e}")
+        if not str(e.get("url", "")).startswith("https://"):
+            fail(f"also_screened item {e.get('n')} must carry an https url")
     lg = b.get("logged", [])
     if not isinstance(lg, list) or len(lg) > 6 or any((not isinstance(x, str)) or len(x) > 240 for x in lg):
         fail("logged must be a list of at most 6 strings of at most 240 characters")
@@ -231,10 +244,9 @@ def item_card(run, it):
 def item_row(run, it):
     due_txt, urgent = due_text(run, it.get("due"))
     due_style = f"color:{ORANGE};font-weight:700;" if urgent else f"color:{MUTED};"
-    link = ""
-    if it.get("links"):
-        l = it["links"][0]
-        link = f'<a href="{esc(l["url"])}" style="color:{TEAL};text-decoration:underline;font-weight:600;">{esc(l["label"])}</a>'
+    link = "<br>".join(
+        f'<a href="{esc(l["url"])}" style="color:{TEAL};text-decoration:underline;font-weight:600;">{esc(l["label"])}</a>'
+        for l in (it.get("links") or []))
     reason = f'<div style="font-family:{FONT};font-size:12px;color:{MUTED};padding-top:2px;">{esc(it["fit"])}</div>' if it.get("fit") else ""
     return f'''
 <tr><td style="padding:8px 28px 0 28px;">
